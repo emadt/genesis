@@ -8,8 +8,8 @@ resource "aws_security_group" "allow_office" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    # Please restrict your ingress to only necessary IPs and ports.
-    # Opening to 0.0.0.0/0 can lead to security vulnerabilities.
+    # Please restrict your ingress to only office IPs and ports.
+    # Opening to 0.0.0.0/0 can lead to bad things.
     cidr_blocks = ["64.124.17.226/32"]
   }
 
