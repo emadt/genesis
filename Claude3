@@ -1,0 +1,81 @@
+import boto3
+import json
+
+def extract_text_from_pdf(bucket_name, pdf_file_path):
+    """Extract text from a PDF file using AWS Textract."""
+    textract_client = boto3.client('textract')
+    
+    # Call Textract to analyze the PDF and extract text
+    try:
+        response = textract_client.analyze_document(
+            Document={'S3Object': {'Bucket': bucket_name, 'Name': pdf_file_path}},
+            FeatureTypes=['TABLES', 'FORMS'])
+        
+        # Extract text from Textract response
+        text = ""
+        for item in response['Blocks']:
+            if item['BlockType'] == 'LINE':
+                text += item['Text'] + '\n'
+        
+        return text
+    
+    except Exception as e:
+        print(f"Error extracting text from PDF using Textract: {e}")
+        raise
+
+def analyze_text_with_bedrock(text):
+    """Analyze text using AWS Bedrock."""
+    # Define prompt using the extracted text
+    prompt = f"Please analyze the extracted text:\n{text}\nAnd provide a list of products and heat codes and steel Mill."
+    
+    # Call the Claude 3 Sonnet model through AWS Bedrock
+    model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+    max_tokens = 2000
+
+    body = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt}
+                ]
+            }
+        ]
+    })
+
+    try:
+        bedrock_runtime = boto3.client('bedrock-runtime')
+        response = bedrock_runtime.invoke_model_with_response_stream(body=body, modelId=model_id)
+
+        model_response = ""
+        for event in response.get("body"):
+            chunk = json.loads(event["chunk"]["bytes"])
+
+            if chunk['type'] == 'content_block_delta' and chunk['delta']['type'] == 'text_delta':
+                model_response += chunk['delta']['text']
+
+        return model_response
+
+    except Exception as e:
+        print(f"An error occurred during analysis with Bedrock: {e}")
+        raise
+
+# Specify the S3 bucket and PDF file path
+bucket_name = 'msa-textract'
+pdf_file_path = 'textfiles/heatcode.pdf'
+
+try:
+    # Extract text from PDF using AWS Textract
+    extracted_text = extract_text_from_pdf(bucket_name, pdf_file_path)
+    
+    # Analyze extracted text using Bedrock
+    model_response = analyze_text_with_bedrock(extracted_text)
+    
+    # Print or further process the model response as needed
+    print("Model response:")
+    print(model_response)
+
+except Exception as e:
+    print(f"An error occurred: {e}")
